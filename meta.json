@@ -1,1 +1,10 @@
-
+{
+    "packages": [
+        {
+            "name": "Pine3D",
+            "version": "main1",
+            "source": "/pine3d.spm",
+            "license": "MIT",
+            "dependencies": []
+        }
+}
