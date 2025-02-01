@@ -1,0 +1,41 @@
+{
+    "metadata": {
+        "created_at": "1-2-2025",
+        "author": "Xella37",
+        "description": "Pine3D 3D graphics engine"
+    },
+    "fs": {
+        "var/lib/Pine3D/": [
+            {
+                "filename": "Pine3D.lua",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/Pine3D.lua"
+            },
+            {
+                "filename": "betterblittle.lua",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/betterblittle.lua"
+            },
+            {
+                "filename": "Mountains.lua",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/Mountains.lua"
+            },
+            {
+                "filename": "noise.lua",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/noise.lua"
+            }
+        ],
+        "var/lib/Pine3D/models": [
+            {
+                "filename": "box",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/models/box"
+            },
+            {
+                "filename": "emerald",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/models/emerald"
+            },
+            {
+                "filename": "pineapple",
+                "content_link": "https://raw.githubusercontent.com/Xella37/Pine3D/master/models/pineapple"
+            }
+        ]
+    }
+}
