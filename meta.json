@@ -3,52 +3,52 @@
         {
             "name": "example-package",
             "version": "1.2.3",
-            "source": "/examplepkg",
+            "source": "/examplepkg.spm",
             "license": "MIT",
             "dependencies": [
                 {
                     "name": "dependency-1",
                     "version": "2.0.0",
-                    "source": "/dependency-1"
+                    "source": "/dependency-1.spm"
                 },
                 {
                     "name": "dependency-2",
                     "version": "3.1.4",
-                    "source": "/dependency-2"
+                    "source": "/dependency-2.spm"
                 }
             ]
         },
         {
             "name": "dependency-1",
             "version": "2.0.0",
-            "source": "/dependency-1",
+            "source": "/dependency-1.spm",
             "license": "MIT",
             "dependencies": [
                 {
                     "name": "nested-dependency",
                     "version": "1.0.0",
-                    "source": "/nested-dependency"
+                    "source": "/nested-dependency.spm"
                 }
             ]
         },
         {
             "name": "dependency-2",
             "version": "3.1.4",
-            "source": "/dependency-2",
+            "source": "/dependency-2.spm",
             "license": "MIT",
             "dependencies": []
         },
         {
             "name": "nested-dependency",
             "version": "1.0.0",
-            "source": "/nested-dependency",
+            "source": "/nested-dependency.spm",
             "license": "MIT",
             "dependencies": []
         },
         {
             "name": "another-package",
             "version": "4.5.6",
-            "source": "/another-package",
+            "source": "/another-package.spm",
             "license": "GPL-3.0",
             "dependencies": []
         }
