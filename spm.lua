@@ -552,49 +552,55 @@ elseif need(data, { "delete" }, true) or need(data, { "del" }, true) then
             work_print(directoryPath.." deleted.")
         end
     end
-elseif need(data, { "update" }, true) then
+elseif need(data, { "update" }) or need(data, { "update" }, true) then
     checkJSON()
     check_libdef()
 
-    local tmp = fs.open("var/lib/spm/status", "r")
-    local tmpdata = tmp.readAll()
-    tmp.close()
-    if tmpdata ~= "" then
-        tmpdata = json.decode(tmpdata)
+    if flags[1] ~= "m" then
+        local tmp = fs.open("var/lib/spm/status", "r")
+        local tmpdata = tmp.readAll()
+        tmp.close()
+        if tmpdata ~= "" then
+            tmpdata = json.decode(tmpdata)
+        else
+            err_print("No currently installed packages")
+            error("",0)
+        end
+
+        local found = false
+        local files = {}
+        for _,v in ipairs(tmpdata) do
+            if v[1] == data[2] then
+                found = true
+                files = v[4]
+            end
+        end
+
+        if found == false then
+            err_print("Package not installed")
+            error("", 0)
+        end
+        tmp = fs.open("var/lib/spm/lists/meta.json", "r")
+        local fdat = tmp.readAll()
+        tmp.close()
+        local metadata = json.decode(fdat)
+        local source
+
+        for _,pkg in ipairs(metadata.packages) do
+            if pkg.name == data[2] then
+                source = pkg.source
+            end
+        end
+
+        local dat = get(base .. source)
+        local ngzdata = libdef:DecompressGzip(dat)
+        local tmpjdata = json.decode(ngzdata)
+        upt_archive(tmpjdata,true)
     else
-        err_print("No currently installed packages")
-        error("",0)
+        fs.delete("var/lib/spm/lists/meta.json")
+        wget(get("https://raw.githubusercontent.com/yabastar0/spm/refs/heads/main/meta.json"),"var/lib/spm/lists/meta.json")
+        work_print("meta.json updated.")
     end
-
-    local found = false
-    local files = {}
-    for _,v in ipairs(tmpdata) do
-        if v[1] == data[2] then
-            found = true
-            files = v[4]
-        end
-    end
-
-    if found == false then
-        err_print("Package not installed")
-        error("", 0)
-    end
-    tmp = fs.open("var/lib/spm/lists/meta.json", "r")
-    local fdat = tmp.readAll()
-    tmp.close()
-    local metadata = json.decode(fdat)
-    local source
-
-    for _,pkg in ipairs(metadata.packages) do
-        if pkg.name == data[2] then
-            source = pkg.source
-        end
-    end
-
-    local dat = get(base .. source)
-    local ngzdata = libdef:DecompressGzip(dat)
-    local tmpjdata = json.decode(ngzdata)
-    upt_archive(tmpjdata,true)
 elseif need(data, { "check" }, true) then
     checkJSON()
     check_libdef()
