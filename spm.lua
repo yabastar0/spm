@@ -50,12 +50,55 @@ local function check_libdef()
     end
 end
 
+local function get(url)
+    local ok, err = http.checkURL(url)
+    if not ok then
+        err_print(err or "Invalid URL.")
+        error("",0)
+    end
+
+    if flags[1] ~= "s" then
+        write("Connecting to " .. url .. "... ")
+    end
+
+    local response = http.get(url)
+    if not response then
+        err_print("Failed to retreive "..url)
+        return nil
+    end
+
+    if flags[1] ~= "s" then
+        print("Success.")
+    end
+
+    local sResponse = response.readAll()
+    response.close()
+    return sResponse or ""
+end
+
+local function wget(res,sPath)
+    if not res then return end
+
+    local file, err = fs.open(sPath, "wb")
+    if not file then
+        err_print("Cannot save file: " .. err)
+        return
+    end
+
+    file.write(res)
+    file.close()
+
+    if flags[1] ~= "s" then
+        print("Downloaded as " .. sPath)
+    end
+end
+
 local function parse_archive(tmpjdata)
     if not tmpjdata or not tmpjdata.fs then
         err_print("Invalid archive data: missing 'fs' key")
         error("", 0)
     end
-
+    local written_to = {}
     for dirpath, files in pairs(tmpjdata.fs) do
         fs.makeDir(dirpath)
 
@@ -66,17 +109,21 @@ local function parse_archive(tmpjdata)
             if file.content then
                 tmp.write(file.content)
             elseif file.content_link then
-                shell.run("wget "..file.content_link.." tmp/parsetmp")
-                work_print("Retreived content link "..file.content_link)
+                wget(get(file.content_link),"tmp/parsetmp")
+                if flags[1] ~= "s" then
+                    work_print("Retreived content link "..file.content_link)
+                end
                 local tmpparse = fs.open("tmp/parsetmp","r")
                 local tmpparsedat = tmpparse.readAll()
                 tmpparse.close()
                 fs.delete("tmp/parsetmp")
                 tmp.write(tmpparsedat)
             end
+            table.insert(written_to, #written_to+1, filepath)
             tmp.close()
         end
     end
+    return written_to
 end
 
 for _, arg in ipairs(args) do
@@ -90,6 +137,10 @@ end
 local function need(dt, de, more)
     if more then
         if #dt == 1 then
+            return false
+        end
+
+        if dt[1] ~= de[1] then
             return false
         end
     else
@@ -129,7 +180,7 @@ local function resolve_dependencies(packages, package_name, resolved, seen)
         else
             err_print("Invalid dependency format in package: " .. package.name)
         end
-    end    
+    end
 end
 
 local function get_package_dependencies(fdat, package_name)
@@ -203,8 +254,10 @@ if need(data, { "verify" }) then
 
         if ans == "y" then
             for url, loc in pairs(urls) do
-                print("Installing " .. loc[2] .. "...")
-                shell.run("wget " .. url .. " " .. loc[1])
+                if flags[1] ~= "s" then
+                    print("Installing " .. loc[2] .. "...")
+                end
+                wget(get(url), loc[1])
                 work_print(loc[2] .. " installed!")
             end
         end
@@ -219,15 +272,17 @@ elseif need(data, { "help" }) then
 
     help          // Displays this menu
 
-    download      // Downloads a package. Alias 'install', 'ins'
+    download      // Downloads a package. Alias 'install', 'down'
         -s        // Downloads silently
 
     delete        // Deletes a package. Alias 'del'
 
     update        // Updates a package. Alias 'up'
-        -a        // Updates all packages
+        -m        // Updates the meta.json file
 
     list          // Lists all packages
+
+    installed     // Lists installed packages
     ]])
 elseif need(data, { "list" }) then
     checkJSON()
@@ -252,7 +307,20 @@ elseif need(data, { "list" }) then
         print("Name: " .. v.name)
         print("Version: " .. v.version .. "\n")
     end
-elseif need(data, { "download" }, true) then
+elseif need(data, { "installed" }) then
+    checkJSON()
+    local tmp = fs.open("var/lib/spm/status", "r")
+    local tmpdata = tmp.readAll()
+    tmp.close()
+    if tmpdata ~= "" then
+        tmpdata = json.decode(tmpdata)
+        for _,v in ipairs(tmpdata) do
+            print(v[1],v[2])
+        end
+    else
+        print("No currently installed packages")
+    end
+elseif need(data, { "download" }, true) or need(data, { "install" }, true) or need(data, { "down" }, true) then
     checkJSON()
     check_libdef()
 
@@ -276,6 +344,7 @@ elseif need(data, { "download" }, true) then
         err_print("No package specified. Usage: spm download <package-name>")
         error("", 0)
     end
+
     local dependencies = get_package_dependencies(metadata.packages, package_name)
 
     local required_installs = {}
@@ -287,52 +356,113 @@ elseif need(data, { "download" }, true) then
             source = package.source
         })
     end
+    local ans = ""
+    if flags[1] ~= "s" then
+        print("Required packages: ")
+        for _, install in ipairs(required_installs) do
+            print("  Package: " .. install.name .. " (Version: " .. install.version .. ", Source: " .. install.source .. ")")
+        end
 
-    print("Required packages: ")
-    for _, install in ipairs(required_installs) do
-        print("  Package: " .. install.name .. " (Version: " .. install.version .. ", Source: " .. install.source .. ")")
-    end
+        local t_size = 0
+        for _,install in ipairs(required_installs) do
+            if not fs.exists("tmp/"..(install.source)) then
+                local response, _ = http.head(base..(install.source), "")
 
-    local t_size = 0
-    for _,install in ipairs(required_installs) do
-        if not fs.exists("tmp/"..(install.source)) then
-            local response, _ = http.head(base..(install.source), "")
+                if response then
+                    local headers = response.getResponseHeaders()
+                    response.close()
 
-            if response then
-                local headers = response.getResponseHeaders()
-                response.close()
-
-                if headers["Content-Length"] then
-                    t_size = t_size + tonumber(headers["Content-Length"])
+                    if headers["Content-Length"] then
+                        t_size = t_size + tonumber(headers["Content-Length"])
+                    end
                 end
             end
         end
-    end
-    local t_str
-    if t_size > 1999 then
-        t_str = tostring(math.floor((t_size / 1024) * 100) / 100) .. "kB"
-    else
-        t_str = tostring(math.floor(t_size * 100) / 100) .. "B"
-    end
+        local t_str
+        if t_size > 999 then
+            t_str = tostring(math.floor((t_size / 1024) * 100) / 100) .. "kB"
+        else
+            t_str = tostring(math.floor(t_size * 100) / 100) .. "B"
+        end
 
-    local ans = ""
-    repeat
-        print("")
-        io.write("Install missing packages? [" .. t_str .. "] (y/n): ")
-        ans = io.read()
-    until ans == "y" or ans == "n"
+        repeat
+            print("")
+            io.write("Install missing packages? [" .. t_str .. "] (y/n): ")
+            ans = io.read()
+        until ans == "y" or ans == "n"
+    end
+    if flags[1] == "s" then
+        ans = "y"
+    end
 
     if ans == "y" then
         for _,install in ipairs(required_installs) do
-            print("Installing " .. install.name .. " " .. install.version .. "...")
-            shell.run("wget " .. base .. install.source .. " tmp/"..install.source)
-            local tmp = fs.open("tmp/"..install.source,"r")
+            if flags[1] ~= "s" then
+                print("Installing " .. install.name .. " " .. install.version .. "...")
+            end
+            wget(get(base .. install.source), " tmp/"..install.source)
+
+            tmp = fs.open("tmp/"..install.source,"r")
             local tmpdata = tmp.readAll()
             tmp.close()
             local ngzdata = libdef:DecompressGzip(tmpdata)
             local tmpjdata = json.decode(ngzdata)
-            parse_archive(tmpjdata)
-            work_print(install.name .. " installed!")
+            local written_to = parse_archive(tmpjdata)
+
+            if not fs.exists("var/lib/spm/status") then
+                tmp = fs.open("var/lib/spm/status", "w")
+                tmp.close()
+            end
+            tmp = fs.open("var/lib/spm/status", "r")
+            tmpdata = tmp.readAll()
+            tmp.close()
+            if not tmpdata == "" then
+                tmpjdata = json.decode(tmpdata)
+            else
+                tmpjdata = {}
+            end
+
+            table.insert(tmpjdata, #tmpjdata+1, {install.name,install.version,install.source,written_to})
+            tmp = fs.open("var/lib/spm/status", "w")
+            tmp.write(json.encode(tmpjdata))
+            tmp.close()
+            if flags[1] ~= "s" then
+                work_print(install.name .. " installed!")
+            end
+        end
+    end
+elseif need(data, { "delete" }, true) or need(data, { "del" }, true) then
+    checkJSON()
+    local tmp = fs.open("var/lib/spm/status", "r")
+    local tmpdata = tmp.readAll()
+    tmp.close()
+    if tmpdata ~= "" then
+        tmpdata = json.decode(tmpdata)
+    else
+        err_print("No currently installed packages")
+        error("",0)
+    end
+
+    local found = false
+    local files = {}
+    for _,v in ipairs(tmpdata) do
+        if v[1] == data[2] then
+            found = true
+            files = v[4]
+        end
+    end
+
+    if found == false then
+        err_print("Package not installed")
+        error("", 0)
+    end
+
+    for _,file in ipairs(files) do
+        local directoryPath = file:match("(.+)/[^/]+$")
+
+        if directoryPath and fs.exists(directoryPath) and directoryPath ~= "var/lib" and directoryPath ~= "var" then
+            fs.delete(directoryPath)
+            work_print(directoryPath.." deleted.")
         end
     end
 else
