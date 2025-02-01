@@ -26,6 +26,16 @@ local function work_print(text)
     print(text)
 end
 
+local function info_print(text)
+    io.write("[ ")
+    local old_fg = term.getTextColor()
+    term.setTextColor(colors.white)
+    io.write("INFO")
+    term.setTextColor(old_fg)
+    io.write(" ] ")
+    print(text)
+end
+
 local json = false
 local function checkJSON()
     if not fs.exists("var/lib/spm/json.lua") then
@@ -124,6 +134,81 @@ local function parse_archive(tmpjdata)
         end
     end
     return written_to
+end
+
+local function upt_archive(tmpjdata,upt)
+    if not tmpjdata or not tmpjdata.fs then
+        err_print("Invalid archive data: missing 'fs' key")
+        error("", 0)
+    end
+
+    for dirpath, files in pairs(tmpjdata.fs) do
+        fs.makeDir(dirpath)
+
+        for _, file in ipairs(files) do
+            local filepath = fs.combine(dirpath, file.filename)
+
+            local tmp = fs.open(filepath, "r")
+            if tmp and upt == true then
+                if file.content then
+                    if file.content == tmp.readAll() then
+                        info_print(file.filename.." is up to date.")
+                        tmp.close()
+                    else
+                        info_print(file.filename.." is out of date. Updating.")
+                        tmp.close()
+                        tmp = fs.open(filepath, "w")
+                        tmp.write(file.content)
+                        tmp.close()
+                        work_print(file.name.." Updated.")
+                    end
+                elseif file.content_link then
+                    wget(get(file.content_link),"tmp/chktmp")
+                    if flags[1] ~= "s" then
+                        work_print("Retreived content link "..file.content_link)
+                    end
+                    local tmpchk = fs.open("tmp/chktmp","r")
+                    local tmpchkdat = tmpchk.readAll()
+                    tmpchk.close()
+
+                    if tmp.readAll() == tmpchkdat then
+                        info_print(file.filename.." is up to date.")
+                        tmp.close()
+                    else
+                        info_print(file.filename.." is out of date. Updating.")
+                        tmp.close()
+                        tmp = fs.open(filepath, "w")
+                        tmp.write(tmpchkdat)
+                        tmp.close()
+                        work_print(file.filename.." Updated.")
+                    end
+
+                    fs.delete("tmp/chktmp")
+                end
+            elseif not tmp then
+                info_print(file.filename.." not found! Installing...")
+                tmp = fs.open(filepath, "w")
+
+                if file.content then
+                    tmp.write(file.content)
+                    work_print(file.filename.." created.")
+                elseif file.content_link then
+                    wget(get(file.content_link),"tmp/chktmp")
+                    if flags[1] ~= "s" then
+                        work_print("Retreived content link "..file.content_link)
+                    end
+                    local tmpchk = fs.open("tmp/chktmp","r")
+                    local tmpchkdat = tmpchk.readAll()
+                    tmpchk.close()
+                    fs.delete("tmp/chktmp")
+                    tmp.write(tmpchkdat)
+                    work_print(file.filename.." created.")
+                end
+
+                tmp.close()
+            end
+        end
+    end
 end
 
 for _, arg in ipairs(args) do
@@ -279,6 +364,8 @@ elseif need(data, { "help" }) then
 
     update        // Updates a package. Alias 'up'
         -m        // Updates the meta.json file
+
+    check         // Checks a package, only downloads missing files
 
     list          // Lists all packages
 
@@ -463,6 +550,91 @@ elseif need(data, { "delete" }, true) or need(data, { "del" }, true) then
         if directoryPath and fs.exists(directoryPath) and directoryPath ~= "var/lib" and directoryPath ~= "var" then
             fs.delete(directoryPath)
             work_print(directoryPath.." deleted.")
+        end
+    end
+elseif need(data, { "update" }, true) then
+    checkJSON()
+    check_libdef()
+
+    local tmp = fs.open("var/lib/spm/status", "r")
+    local tmpdata = tmp.readAll()
+    tmp.close()
+    if tmpdata ~= "" then
+        tmpdata = json.decode(tmpdata)
+    else
+        err_print("No currently installed packages")
+        error("",0)
+    end
+
+    local found = false
+    local files = {}
+    for _,v in ipairs(tmpdata) do
+        if v[1] == data[2] then
+            found = true
+            files = v[4]
+        end
+    end
+
+    if found == false then
+        err_print("Package not installed")
+        error("", 0)
+    end
+    tmp = fs.open("var/lib/spm/lists/meta.json", "r")
+    local fdat = tmp.readAll()
+    tmp.close()
+    local metadata = json.decode(fdat)
+    local source
+
+    for _,pkg in ipairs(metadata.packages) do
+        if pkg.name == data[2] then
+            source = pkg.source
+        end
+    end
+
+    local dat = get(base .. source)
+    local ngzdata = libdef:DecompressGzip(dat)
+    local tmpjdata = json.decode(ngzdata)
+    upt_archive(tmpjdata,true)
+elseif need(data, { "check" }, true) then
+    checkJSON()
+    check_libdef()
+
+    local tmp = fs.open("var/lib/spm/status", "r")
+    local tmpdata = tmp.readAll()
+    tmp.close()
+    if tmpdata ~= "" then
+        tmpdata = json.decode(tmpdata)
+    else
+        err_print("No currently installed packages")
+        error("",0)
+    end
+
+    local found = false
+    local version = ""
+    local files = {}
+    for _,v in ipairs(tmpdata) do
+        if v[1] == data[2] then
+            found = true
+            files = v[4]
+            version = v[2]
+        end
+    end
+
+    if found == false then
+        err_print("Package not installed")
+        error("", 0)
+    end
+    tmp = fs.open("var/lib/spm/lists/meta.json", "r")
+    local fdat = tmp.readAll()
+    tmp.close()
+    local metadata = json.decode(fdat)
+
+    for _,pkg in ipairs(metadata.packages) do
+        if pkg.name == data[2] and pkg.version == version then
+            local dat = get(base .. pkg.source)
+            local ngzdata = libdef:DecompressGzip(dat)
+            local tmpjdata = json.decode(ngzdata)
+            upt_archive(tmpjdata,false)
         end
     end
 else
