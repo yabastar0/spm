@@ -552,7 +552,7 @@ elseif need(data, { "delete" }, true) or need(data, { "del" }, true) then
             work_print(directoryPath.." deleted.")
         end
     end
-elseif need(data, { "update" }) or need(data, { "update" }, true) then
+elseif need(data, { "update" }) or need(data, { "update" }, true) or need(data, { "up" }) or need(data, { "up" }, true) then
     checkJSON()
     check_libdef()
 
